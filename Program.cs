@@ -2,15 +2,6 @@
                           // ← 추가: SQLite 데이터베이스를 여는 도구
 using Microsoft.Data.Sqlite;
 using System.Text.Json;   // ← 추가: 파일의 JSON을 C# 객체로 바꾸는 도구
-// 1-2. 파일에서 데이터 읽기 — 코드 안의 값 대신 Data/monsters.json
-//var dataPath = Path.Combine(app.Environment.ContentRootPath, "Data", "monsters.json");
-//var mydataPath = Path.Combine(app.Environment.ContentRootPath, "Data", "mydata.json");
-//var json = File.ReadAllText(dataPath);
-//var mydatajson = File.ReadAllText(mydataPath);
-//var monsters = JsonSerializer.Deserialize<List<Monster>>(
-//    json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
-//var mydata = JsonSerializer.Deserialize<Mydata>(
-//    mydatajson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
       
@@ -187,7 +178,9 @@ big.Add(new Monster { Id = i, Name = $"{src.Name} #{i}", Hp = src.Hp, Attack = s
 return new { monsters = big };
 });
 
-app.Run("http://localhost:5000");
+// 바꾼 뒤 — PORT가 없으면(내 PC) 5000, 있으면(Render) 그 번호
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
+app.Run($"http://0.0.0.0:{port}");
 
 // ── 데이터 모양 — 1회차와 같다 ─────────────────────────────────────────
 class Monster
@@ -198,27 +191,6 @@ class Monster
     public int Attack { get; set; }
     public float Speed { get; set; }
 }
-
-
-//app.MapGet("/hello", () => "안녕하세요, 서버입니다.");
-
-//app.MapGet("/monsters", () => new { monsters });
-
-//app.MapGet("/monsters/{id:int}", (int id) =>
-//{
-//    var found = monsters.Find(m => m.Id == id);
-//    return found is null
-//        ? Results.NotFound(new { error = $"id {id} 몬스터가 없습니다." })
-//        : Results.Ok(found);
-//});
-//app.MapGet("/monsters/count", () => new { count = monsters.Count });
-//app.MapGet("/monsters/count/{count:int}", (int count) => {
-//    var found = monsters.Find(m => m.Count == count);
-//    return found is null
-//    ? Results.NotFound(new { error = $"count {count} 숫자 만큼 처치한 적이 없습니다." })
-//    : Results.Ok(found);
-//    });
-//app.MapGet("/mydata", () => mydata);
 
 
 class Mydata

@@ -46,7 +46,27 @@ insert.Parameters.AddWithValue("$speed", m.Speed);
 insert.ExecuteNonQuery();
 }
 }
+
+// ── 3회차. 랭킹 테이블 — 플레이어 한 명당 한 줄, 최고 점수만 남긴다 ──────────
+// 등수는 저장하지 않는다. 점수가 바뀔 때마다 모두 고쳐야 하므로 조회할 때 계산한다
+var createScores = conn.CreateCommand();
+createScores.CommandText = """
+        CREATE TABLE IF NOT EXISTS scores (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT    NOT NULL UNIQUE,
+            score      INTEGER NOT NULL,
+            updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        )
+        """;
+createScores.ExecuteNonQuery();
 }
+
+// 등수 매기는 기준: 점수 높은 순, 같은 점수면 먼저 세운 사람이 위
+const string RankedScoresSql = """
+        SELECT ROW_NUMBER() OVER (ORDER BY score DESC, updated_at ASC, id ASC) AS rank,
+               name, score
+        FROM scores
+        """;
 
 // SELECT 결과(행들)를 Monster 목록으로 바꾸는 헬퍼. GET 네 곳에서 같이 쓴다
 static List<Monster> ReadMonsters(SqliteDataReader reader)
@@ -178,6 +198,61 @@ big.Add(new Monster { Id = i, Name = $"{src.Name} #{i}", Hp = src.Hp, Attack = s
 return new { monsters = big };
 });
 
+// ── 3회차. 랭킹 Top 10 조회 ────────────────────────────────────────────
+app.MapGet("/scores/top", () =>
+{
+using var conn = new SqliteConnection(connectionString);
+conn.Open();
+var cmd = conn.CreateCommand();
+cmd.CommandText = $"{RankedScoresSql} LIMIT 10";
+using var reader = cmd.ExecuteReader();
+var ranks = new List<RankEntry>();
+while (reader.Read())
+{
+ranks.Add(new RankEntry
+{
+Rank = reader.GetInt32(0),
+Name = reader.GetString(1),
+Score = reader.GetInt32(2)
+});
+}
+return new { ranks };
+});
+
+// ── 3회차. 점수 기록 — PUT은 "이걸로 바꿔라". 단, 기존 기록보다 높을 때만 바꾼다 ──
+// 처음 온 이름이면 새로 넣고, 이미 있는 이름이면 새 점수가 더 높을 때만 고친다
+app.MapPut("/scores", (ScoreRequest s) =>
+{
+if (string.IsNullOrWhiteSpace(s.Name))
+return Results.BadRequest(new { error = "name은 비어 있으면 안 됩니다." });
+if (s.Score < 0)
+return Results.BadRequest(new { error = "score는 0 이상이어야 합니다." });
+
+using var conn = new SqliteConnection(connectionString);
+conn.Open();
+var upsert = conn.CreateCommand();
+upsert.CommandText = """
+        INSERT INTO scores (name, score) VALUES ($name, $score)
+        ON CONFLICT(name) DO UPDATE
+            SET score = excluded.score, updated_at = datetime('now')
+            WHERE excluded.score > scores.score
+        """;
+upsert.Parameters.AddWithValue("$name", s.Name);
+upsert.Parameters.AddWithValue("$score", s.Score);
+bool newRecord = upsert.ExecuteNonQuery() > 0;   // 넣거나 고쳤으면 1, 기존 기록이 더 높으면 0
+
+// 지금 이 플레이어의 최고 점수와 전체 등수
+var rankCmd = conn.CreateCommand();
+rankCmd.CommandText = $"SELECT rank, score FROM ({RankedScoresSql}) WHERE name = $name";
+rankCmd.Parameters.AddWithValue("$name", s.Name);
+using var reader = rankCmd.ExecuteReader();
+reader.Read();
+int rank = reader.GetInt32(0);
+int bestScore = reader.GetInt32(1);
+
+return Results.Ok(new { newRecord, name = s.Name, bestScore, rank, inTop10 = rank <= 10 });
+});
+
 // 바꾼 뒤 — PORT가 없으면(내 PC) 5000, 있으면(Render) 그 번호
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5000";
 app.Run($"http://0.0.0.0:{port}");
@@ -190,6 +265,20 @@ class Monster
     public int Hp { get; set; }
     public int Attack { get; set; }
     public float Speed { get; set; }
+}
+
+// ── 3회차. 랭킹 데이터 모양 ────────────────────────────────────────────
+class ScoreRequest
+{
+    public string Name { get; set; } = "";
+    public int Score { get; set; }
+}
+
+class RankEntry
+{
+    public int Rank { get; set; }
+    public string Name { get; set; } = "";
+    public int Score { get; set; }
 }
 
 

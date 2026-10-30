@@ -1,0 +1,9 @@
+# 내 PC의 빌드 결과물과 DB는 이미지에 넣지 않는다 — 컨테이너 안에서 새로 빌드한다
+bin/
+obj/
+app/
+.vs/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

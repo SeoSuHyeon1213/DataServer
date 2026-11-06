@@ -236,30 +236,6 @@ app.MapGet("/auth/me", (ClaimsPrincipal user) => new
     player = user.FindFirst("sub")?.Value,
     expiresAt = DateTimeOffset.FromUnixTimeSeconds(long.Parse(user.FindFirst("exp")!.Value))
 }).RequireAuthorization();
-// ── 3회차 인증. 몬스터 추가 — 이제 토큰이 있어야 들어온다. 누가 추가했는지는 토큰에서 꺼낸다 ──
-app.MapPost("/monsters", (Monster m, ClaimsPrincipal user) =>   // ← user: 검사를 통과한 토큰의 주인
-{
-    if (string.IsNullOrWhiteSpace(m.Name))
-        return Results.BadRequest(new { error = "name은 비어 있으면 안 됩니다." });
-
-    using var conn = new SqliteConnection(connectionString);
-    conn.Open();
-    var cmd = conn.CreateCommand();
-    cmd.CommandText = """
-        INSERT INTO monsters (name, hp, attack, speed) VALUES ($name, $hp, $attack, $speed);
-        SELECT last_insert_rowid();
-        """;
-    cmd.Parameters.AddWithValue("$name", m.Name);
-    cmd.Parameters.AddWithValue("$hp", m.Hp);
-    cmd.Parameters.AddWithValue("$attack", m.Attack);
-    cmd.Parameters.AddWithValue("$speed", m.Speed);
-    m.Id = (int)(long)cmd.ExecuteScalar()!;   // DB가 붙여 준 새 id
-
-    var player = user.FindFirst("sub")?.Value;   // ← 서버가 서명을 확인한 토큰 속 이름
-    app.Logger.LogInformation("몬스터 추가: {Name} (추가한 사람: {Player})", m.Name, player);   // ← 서버 창에 남긴다
-
-    return Results.Created($"/monsters/{m.Id}", m);   // 201 Created + 새 몬스터
-}).RequireAuthorization();   // ← 이 한 줄이 자물쇠. 토큰이 없거나 틀리면 401
 
 // ── 2회차. 몬스터 고치기 — PUT은 "이걸로 바꿔라". 본문의 JSON으로 그 id의 줄을 통째로 바꾼다 ──
 app.MapPut("/monsters/{id:int}", (int id, Monster m) =>
